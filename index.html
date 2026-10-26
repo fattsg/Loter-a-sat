@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="es"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Lotería del SAT · Jugador</title>
+<style>
+:root{--bg:#f4ead2;--ink:#1d2a4a;--card:#fffaf0;--red:#c8372d;--gold:#e9a820;--muted:#6b6450;--bean:#2f6b4f;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);color-scheme:light}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#141b30;--ink:#f3e9cf;--card:#222c4a;--red:#ef6a5c;--gold:#f0b73a;--muted:#a9a58f;--bean:#6fcf9f;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#141b30;--ink:#f3e9cf;--card:#222c4a;--red:#ef6a5c;--gold:#f0b73a;--muted:#a9a58f;--bean:#6fcf9f;color-scheme:dark}
+*{box-sizing:border-box}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:"Trebuchet MS","Segoe UI",system-ui,sans-serif;min-height:100vh}
+main{max-width:640px;margin:0 auto;padding:16px 14px 40px}
+h1{font-family:Georgia,"Times New Roman",serif;font-size:2rem;margin:4px 0 2px;letter-spacing:.5px;color:var(--red)}
+p.sub{margin:0 0 14px;color:var(--muted);font-size:.95rem}
+.tabs{display:flex;gap:8px;margin-bottom:14px}
+.tabs button,.btn{font:inherit;font-weight:700;border:2px solid var(--ink);background:transparent;color:var(--ink);padding:10px 16px;border-radius:10px;cursor:pointer}
+.tabs button{flex:1}
+.tabs button[aria-pressed="true"],.btn.main{background:var(--ink);color:var(--bg)}
+button:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
+.board{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.tile{position:relative;background:var(--card);border:2px solid var(--red);border-radius:8px;aspect-ratio:3/4;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:4px;cursor:pointer;font:inherit;color:var(--ink);text-align:center}
+.tile .e{font-size:clamp(1.4rem,7vw,2.2rem);line-height:1}
+.tile .n{font-size:clamp(.62rem,2.6vw,.8rem);font-weight:700;line-height:1.1;overflow-wrap:anywhere}
+.tile.on::after{content:"";position:absolute;width:42%;aspect-ratio:1;border-radius:50%;background:var(--bean);border:3px solid var(--card);box-shadow:0 0 0 2px var(--bean);top:50%;left:50%;transform:translate(-50%,-50%)}
+.tile.on{background:color-mix(in srgb,var(--gold) 22%,var(--card))}
+.row{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;align-items:center}
+.msg{margin-top:12px;font-family:Georgia,serif;font-size:1.5rem;color:var(--red);font-weight:700;min-height:1.8em}
+.hint{font-size:.85rem;color:var(--muted)}
+.clue{background:var(--card);border:3px solid var(--red);border-radius:14px;padding:22px 18px;min-height:200px;display:flex;flex-direction:column;justify-content:center;gap:12px}
+.clue .no{color:var(--muted);font-size:.9rem}
+.clue .q{font-family:Georgia,serif;font-size:clamp(1.3rem,5.5vw,1.9rem);line-height:1.3}
+.clue .a{font-size:clamp(1.4rem,6vw,2rem);font-weight:800;color:var(--red)}
+.hist{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.hist span{background:var(--card);border:1px solid var(--muted);border-radius:20px;padding:3px 10px;font-size:.8rem}
+[hidden]{display:none!important}
+</style></head><body><main>
+<h1>Lotería del SAT</h1>
+<section id="player">
+<div class="board" id="board"></div>
+<div class="msg" id="msg"></div>
+<div class="row">
+<button class="btn main" id="newb">Nueva tabla</button>
+</div>
+</section>
+
+</main>
+<script>
+var C=[
+["💵", "Ingreso bruto (IB)", "Todo el dinero que entra por la actividad, sin restar nada."],
+["🧾", "Gastos de operación (GO)", "Dinero que gastas para que el negocio funcione día a día. También se llama COA o MYO."],
+["📉", "Depreciación (D)", "Reparte el costo del equipo entre los años de vida útil. No es flujo de efectivo."],
+["🎯", "Ingreso gravable (IG)", "Cifra sobre la que el SAT calcula el impuesto: IB − GO − D."],
+["💰", "UNDI", "Utilidad neta después de impuestos: lo que de verdad te queda. IG − impuestos."],
+["🪣", "Tasa graduada", "El impuesto se calcula por cubetas: cada tramo del IG paga su propia tasa."],
+["🚕", "Tasa marginal", "Lo que te cobran por el siguiente peso: la tasa de la última cubeta."],
+["📊", "Tasa promedio", "Impuesto total entre IG. Qué porcentaje pagaste en total."],
+["🏛️", "Tasa efectiva (Te)", "Combina el impuesto estatal y el federal: t estatal + (1 − t estatal)(t federal)."],
+["📒", "Valor en libros (VL)", "Costo del equipo menos la depreciación acumulada. Número contable, no precio de mercado."],
+["🔁", "Recobro de depreciación (RD)", "Vendes por más que el valor en libros: el SAT recupera la deducción que tomaste de más."],
+["🏠", "Ganancia de capital (GC)", "Vendes por más de lo que costó. Típico de terrenos y edificios."],
+["🩹", "Pérdida de capital (PC)", "Vendes por menos que el valor en libros. Te ahorra impuestos."],
+["🗃️", "FEAI", "Flujo de efectivo antes de impuestos: IB − GO − P + S. Sin depreciación."],
+["🏦", "FEDI", "Flujo de efectivo después de impuestos: FEAI − impuestos."],
+["🚧", "TMAR", "Rendimiento mínimo que la empresa exige, ya contando impuestos."],
+["📈", "Tasa de rendimiento (TR)", "La tasa i* que hace cero el valor presente del FEDI."],
+["➕", "Análisis incremental", "Se evalúa solo la inversión extra de la alternativa más cara. Elegir por la TR más alta es una falacia."],
+["⚡", "SMARC", "Depreciación acelerada: lleva el activo a cero en el año n + 1."],
+["♻️", "Valor de salvamento (S)", "Lo que vale el equipo al final de su vida útil."],
+["🏋️", "Defensor y retador", "En reemplazo, el equipo actual contra el candidato nuevo. El defensor entra con su valor comercial."],
+["⚖️", "VEA", "Valor económico agregado: UNDI − costo del capital (i × valor en libros)."],
+["🌡️", "Análisis de sensibilidad", "Cómo cambia el VP, VA o TR cuando varías un parámetro estimado, como la TMAR o la vida útil."],
+["🎲", "Valor esperado", "Suma de cada resultado por su probabilidad. Promedio de largo plazo."],
+["🌳", "Árbol de decisión", "Se dibuja de izquierda a derecha y se resuelve de derecha a izquierda con valores esperados."],
+["🧮", "Vida útil", "Años durante los que te sirve el equipo. Es el divisor de la depreciación en línea recta."],
+["📏", "Depreciación línea recta", "D = costo entre vida útil: la misma cantidad cada año."],
+["🏷️", "Costo inicial (P)", "Inversión que se paga de golpe para comprar el equipo."],
+["🌅", "Año 0", "Momento de la compra de todo el equipo. El flujo de efectivo es negativo."],
+["📓", "Libreta 1", "Flujo de efectivo antes de impuestos: solo dinero real, sin depreciación ni impuestos."],
+["📔", "Libreta 2", "Se parte de la libreta 1 y se resta solo el impuesto."],
+["🛡️", "Exención personal", "Descuento fijo para individuos por ti, tu pareja y tus hijos."],
+["📋", "Deducción estándar", "Descuento fijo para individuos, sin necesidad de comprobantes."],
+["🏢", "Corporación", "Gasta para producir ingreso, por eso sus gastos sí son deducibles."],
+["🌮", "Impuesto estatal", "Se paga primero; el federal se calcula sobre lo que queda."],
+["🦅", "Impuesto federal", "Se calcula sobre lo que queda después de pagar el estatal."],
+["🔄", "Indexación", "Ajuste anual de los límites de las cubetas por inflación y otros factores."],
+["🍽️", "Pedido extra", "Ejemplo del catering de $10,000: para decidir si conviene se usa la tasa marginal."],
+["🤝", "Precio de venta (PV)", "Lo que recibes al vender el activo. Se compara contra el VL y contra P."],
+["🗺️", "Zonas del PV", "Según caiga abajo del VL, entre VL y P, o arriba de P, cambia el resultado fiscal."],
+["🧩", "IG ampliado", "IG = IB − GO − D + RD + GC − PC. Incluye lo que pasa al vender el activo."],
+["🦴", "Analizador óseo", "Ejemplo de la empresa médica con contrato de la NBA para estudiar densidad ósea."],
+["🍰", "Tasas SMARC 5 años", "20 %, 32 % y 19.2 % del costo en los años 1 a 3."],
+["🧯", "Ahorro por pérdida", "Se calcula PC por Te: reduce lo que le pagas al SAT."],
+["💸", "Impuesto por recobro", "Se calcula RD por Te: lo que pagas de más al vender sobre el valor en libros."],
+["🧲", "VP del FEDI", "Valor presente de los flujos después de impuestos, descontados a la TMAR."],
+["📆", "VA del FEDI", "Valor anual equivalente de los flujos después de impuestos."],
+["✅", "VP mayor que 0", "Un solo proyecto: es viable porque alcanza o supera la TMAR."],
+["🪫", "Solo costos", "Se estiman los ahorros después de impuestos con signo positivo."],
+["🔢", "MCM de las vidas", "Mínimo común múltiplo: periodo para comparar alternativas con vidas distintas."],
+["🧠", "TIR en Excel", "Función que calcula la tasa de rendimiento i* del FEDI."],
+["💳", "Función PAGO", "En Excel convierte el VP del FEDI en un valor anual."],
+["🔮", "TR antes aproximada", "Se divide la TR después de impuestos entre (1 − Te)."],
+["🔼", "Δi* ≥ TMAR", "Se elige la alternativa de mayor inversión si el flujo extra rinde al menos la TMAR."],
+["➖", "FEDI incremental", "FEDI de la inversión mayor menos FEDI de la inversión menor."],
+["⛓️", "Punto de equilibrio", "Si la TMAR supera esta TR en la gráfica de VP contra i, no se justifica la inversión extra."],
+["🌐", "Fibra óptica", "Ejemplo de $50,000 con FEAI de $20,000: su FEDI es $16,000 y su TR 18.03 %."],
+["🤑", "Valor comercial", "En reemplazo, el defensor entra con este valor como costo inicial."],
+["🔩", "Análisis de reemplazo", "Decide si conservar el equipo actual o cambiarlo. Vender el viejo tiene efecto fiscal."],
+["🏧", "Costo del capital", "i por el valor en libros del año anterior: lo que cuesta tener dinero invertido."],
+["🌟", "VEA mayor que 0", "El proyecto rinde más que la TMAR después de impuestos."],
+["🤲", "VEA y FEDI", "Dan el mismo valor anual: uno mide efectivo real y el otro ya descuenta el costo del capital."],
+["🔬", "Parámetro", "Variable cuyo valor hay que estimar: costo inicial, vida, COA, tasa de producción."],
+["📐", "Rango de variación", "Paso 2 de sensibilidad: intervalo probable e incrementos de cada parámetro."],
+["🧰", "Medida de valor", "VP, VA, TR o B/C: lo que se recalcula al variar el parámetro."],
+["🖼️", "Gráfica de sensibilidad", "Parámetro contra medida de valor; ayuda a hallar puntos de equivalencia."],
+["🎢", "Relaciones no lineales", "Piden varios puntos intermedios, no solo dos extremos unidos con una recta."],
+["🚦", "TMAR límite", "Tasa arriba de la cual el VP se vuelve negativo y el proyecto destruye valor."],
+["3️⃣", "Tres estimaciones", "Una pesimista, una más probable y una optimista por cada parámetro."],
+["😟", "Estimación pesimista", "El valor del parámetro en el peor escenario razonable."],
+["😄", "Estimación optimista", "El valor del parámetro en el mejor escenario razonable."],
+["😐", "Más probable", "La estimación central, la que se espera que ocurra con mayor probabilidad."],
+["🔟", "Probabilidad", "Número entre 0 y 1.0; las de un conjunto de resultados suman 1.0."],
+["🫥", "Flujo cero", "Su probabilidad no cambia E(X), pero se incluye para que todo sume 1.0."],
+["⛽", "Mezcla de combustible", "Ejemplo de la planta con puro gas, menos de 30 % otros y 30 % o más otros."],
+["🔻", "E(VP) negativo", "Indica que no se espera que la propuesta rinda la TMAR."],
+["🟦", "Nodo de decisión", "Cuadrado del árbol, con las alternativas posibles en sus ramas."],
+["⚪", "Nodo de probabilidad", "Círculo del árbol, con resultados posibles y sus probabilidades en las ramas."],
+["🍃", "Retribución de la rama", "Valor económico en VP, VA o VF al final de cada rama de resultado."],
+["🧭", "E(VP) del árbol", "Medida de valor que se suele usar en el árbol, con el VP a la TMAR."],
+["🛤️", "Mejor ruta", "Último paso del árbol: marcar de regreso las decisiones óptimas."],
+["🔒", "Certidumbre", "Los parámetros se conocen y se usan como valores fijos únicos."],
+["⚠️", "Riesgo", "Hay dos o más valores posibles y se les puede asignar una probabilidad."],
+["🌫️", "Incertidumbre", "Hay varios estados futuros, pero no hay datos para asignarles probabilidades."],
+["🔠", "Variable discreta", "Toma valores contables específicos, como la vida útil en años enteros."],
+["🌊", "Variable continua", "Puede tomar cualquier valor de un intervalo, como flujos de efectivo o tasas."],
+["🪜", "Distribución acumulativa", "Suma de probabilidades: escalones si es discreta, curva suave si es continua."],
+["🎻", "Varianza", "Mide la dispersión de los datos alrededor de la media."],
+["📶", "Desviación estándar", "Entre mayor sea, más amplia la dispersión y mayor el riesgo económico."],
+["🎰", "Simulación Monte Carlo", "Incorpora variación, probabilidad y muestreo al análisis económico."]
+];
+function shuf(a){a=a.slice();for(var i=a.length-1;i>0;i--){var j=Math.floor(Math.random()*(i+1));var t=a[i];a[i]=a[j];a[j]=t}return a}
+var $=function(i){return document.getElementById(i)};
+/* Jugador */
+var mine=[],marks=[];
+function drawBoard(){
+ var b=$("board");b.innerHTML="";
+ mine.forEach(function(c,i){
+  var t=document.createElement("button");t.className="tile"+(marks[i]?" on":"");
+  t.setAttribute("aria-pressed",marks[i]?"true":"false");
+  t.innerHTML='<span class="e">'+c[0]+'</span><span class="n">'+c[1]+'</span>';
+  t.onclick=function(){marks[i]=!marks[i];drawBoard();check()};
+  b.appendChild(t)});
+}
+function check(){
+ var L=[[0,1,2,3],[4,5,6,7],[8,9,10,11],[12,13,14,15],[0,4,8,12],[1,5,9,13],[2,6,10,14],[3,7,11,15],[0,5,10,15],[3,6,9,12],[0,3,12,15]];
+ var w=L.some(function(l){return l.every(function(i){return marks[i]})});
+ $("msg").textContent=w?"¡LOTERÍA!":"";
+}
+function newBoard(){mine=shuf(C).slice(0,16);marks=mine.map(function(){return false});drawBoard();check()}
+$("newb").onclick=newBoard;
+newBoard();
+</script></body></html>
